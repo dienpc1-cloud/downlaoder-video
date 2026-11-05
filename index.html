@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Video Downloader</title>
+<link rel="icon" href="/icon.png">
+<link rel="apple-touch-icon" href="/icon.png">
+<meta name="apple-mobile-web-app-title" content="Downloader">
+<meta name="theme-color" content="#e8edf4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#10151f" media="(prefers-color-scheme: dark)">
+<style>
+  :root {
+    --bg: #e8edf4; --surface: #ffffff; --ink: #142033; --muted: #5a6577;
+    --line: #c9d2df; --accent: #2b4acb; --accent-ink: #ffffff; --error: #b3261e;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10151f; --surface: #1a2130; --ink: #e6ebf3; --muted: #95a0b3;
+      --line: #2e3850; --accent: #7d95ff; --accent-ink: #0d1324; --error: #ff8a80;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: grid; place-items: center;
+    padding: max(24px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
+             max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+    -webkit-text-size-adjust: 100%;
+  }
+  main { width: 100%; max-width: 620px; }
+  h1 { font-size: clamp(1.9rem, 5vw, 2.6rem); line-height: 1.1; margin: 0 0 .4rem; letter-spacing: -.02em; }
+  p.lead { color: var(--muted); margin: 0 0 1.8rem; }
+  form {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 14px; padding: 8px; display: flex; gap: 8px;
+  }
+  input[type=url] {
+    flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink);
+    font: inherit; font-size: 17px; padding: 12px 12px;
+  }
+  input[type=url]:focus { outline: none; }
+  form:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  button {
+    border: 0; border-radius: 9px; background: var(--accent); color: var(--accent-ink);
+    font: inherit; font-weight: 600; padding: 0 22px; cursor: pointer;
+  }
+  button:disabled { opacity: .55; cursor: progress; }
+  button:focus-visible, .mode label:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .mode { display: inline-flex; margin-top: 14px; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+  .mode label { padding: 6px 16px; cursor: pointer; color: var(--muted); font-size: .92rem; }
+  .mode input { position: absolute; opacity: 0; pointer-events: none; }
+  .mode label:has(input:checked) { background: var(--ink); color: var(--bg); }
+  .status { margin-top: 28px; min-height: 64px; }
+  .bar { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; }
+  .bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s ease; }
+  .msg { margin-top: 10px; color: var(--muted); overflow-wrap: anywhere; }
+  .msg.error { color: var(--error); }
+  .msg a { color: var(--accent); font-weight: 600; }
+  .hidden { display: none; }
+  .pw { margin-top: 14px; display: flex; gap: 8px; align-items: center; }
+  .pw input { flex: 1; min-width: 0; font: inherit; font-size: 17px; padding: 10px 12px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); }
+  .pw input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .tip { margin-top: 6px; font-size: .88rem; color: var(--muted); }
+  @media (max-width: 480px) {
+    form { flex-direction: column; }
+    button { padding: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .bar span { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Paste a link, get the video.</h1>
+  <p class="lead">Works with YouTube, Vimeo, X, Reddit, TikTok and many more.</p>
+
+  <form id="form">
+    <input id="url" type="url" required placeholder="https://…" aria-label="Video link" autocomplete="off">
+    <button id="go" type="submit">Download</button>
+  </form>
+
+  <div class="mode" role="radiogroup" aria-label="What to save">
+    <label><input type="radio" name="mode" value="video" checked> Video</label>
+    <label><input type="radio" name="mode" value="audio"> Audio only</label>
+  </div>
+
+  <div class="pw hidden" id="pwRow">
+    <input id="pw" type="password" placeholder="Password" aria-label="Password" autocomplete="current-password">
+  </div>
+
+  <div class="status" aria-live="polite">
+    <div class="bar hidden" id="bar"><span id="fill"></span></div>
+    <div class="msg" id="msg"></div>
+  </div>
+</main>
+
+<script>
+  const form = document.getElementById('form');
+  const urlInput = document.getElementById('url');
+  const go = document.getElementById('go');
+  const bar = document.getElementById('bar');
+  const fill = document.getElementById('fill');
+  const msg = document.getElementById('msg');
+  const pwRow = document.getElementById('pwRow');
+  const pw = document.getElementById('pw');
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  try { pw.value = localStorage.getItem('dl-password') || ''; } catch (_) {}
+  fetch('/api/config').then(r => r.json()).then(c => {
+    if (c.password_required) pwRow.classList.remove('hidden');
+  }).catch(() => {});
+
+  function show(text, isError = false) {
+    msg.textContent = text;
+    msg.classList.toggle('error', isError);
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const url = urlInput.value.trim();
+    const mode = document.querySelector('input[name=mode]:checked').value;
+    go.disabled = true;
+    bar.classList.remove('hidden');
+    fill.style.width = '0%';
+    show('Looking up the video…');
+
+    try {
+      const res = await fetch('/api/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, mode, password: pw.value })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.password) { pwRow.classList.remove('hidden'); pw.focus(); }
+        throw new Error(data.error || 'Couldn’t start the download.');
+      }
+      try { localStorage.setItem('dl-password', pw.value); } catch (_) {}
+      poll(data.id);
+    } catch (err) {
+      fail(err.message);
+    }
+  });
+
+  async function poll(id) {
+    try {
+      const res = await fetch('/api/status/' + id);
+      if (!res.ok) throw new Error('Lost track of this download. Try again.');
+      const s = await res.json();
+
+      if (s.state === 'error') return fail(s.error || 'Download failed.');
+      fill.style.width = s.progress + '%';
+
+      if (s.state === 'done') {
+        const link = '/api/file/' + id;
+        msg.classList.remove('error');
+        msg.innerHTML = '';
+        msg.append('Ready: “' + s.title + '”. Your download should start now. ');
+        const a = document.createElement('a');
+        a.href = link; a.textContent = 'Save it again';
+        msg.append(a);
+        if (isIOS) {
+          const tip = document.createElement('div');
+          tip.className = 'tip';
+          tip.textContent = 'On iPhone: tap “Download” when Safari asks. The file goes to Files › Downloads. To put it in Photos, open it there, tap Share, then “Save Video”.';
+          msg.append(tip);
+        }
+        window.location.href = link;
+        go.disabled = false;
+        urlInput.value = '';
+        return;
+      }
+      show(s.state === 'processing' ? 'Putting the file together…'
+           : s.state === 'downloading' ? `Downloading… ${Math.round(s.progress)}%`
+           : 'Starting…');
+      setTimeout(() => poll(id), 700);
+    } catch (err) {
+      fail(err.message);
+    }
+  }
+
+  function fail(text) {
+    show(text, true);
+    bar.classList.add('hidden');
+    go.disabled = false;
+  }
+</script>
+</body>
+</html>
