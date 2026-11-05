@@ -178,6 +178,7 @@ dialog.wide { width:min(560px,calc(100vw - 32px)); }
 .dlbox .dl-row input { padding:11px 16px; font-size:17px; background:var(--surface); }
 .dlopts { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
 .dlopts .btn[hidden] { display:none; }
+.linkbtn { border:0; background:none; padding:0; color:var(--accent); font-weight:600; cursor:pointer; text-decoration:underline; }
 .seg { display:inline-flex; padding:3px; border:1px solid var(--line); border-radius:999px; background:var(--surface); }
 .segbtn { border:0; background:transparent; padding:7px 14px; border-radius:999px; cursor:pointer; color:var(--muted); font-weight:600; font-size:.9rem; }
 .segbtn.on { background:var(--ink); color:var(--bg); }
@@ -965,16 +966,18 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   function renderDownloader() {
     var h = '<header class="mh"><div class="mt"><h2>Downloader</h2><p class="metaline">Save videos and songs from YouTube, TikTok, X, Reddit, SoundCloud and more.</p></div></header>';
     if (!srv.checked) h += '<div class="empty"><h3>Connecting to the download server…</h3><p>If the server was asleep, this can take up to a minute.</p></div>';
-    else if (!srv.ok) h += '<div class="empty"><h3>The download server isn’t reachable</h3><p>On your PC, double-click start-windows.bat, then open the address it shows in Safari on this iPhone. Both need to be on the same Wi-Fi.</p><button class="btn primary" data-act="dl-retry">Try again</button></div>';
+    else if (!srv.ok && !isIOS) h += '<div class="empty"><h3>The download server isn’t reachable</h3><p>It may be asleep or not running. Wait a minute, then try again.</p><button class="btn primary" data-act="dl-retry">Try again</button></div>';
     else {
       var link = isLinkText(dl.q);
       h += '<div class="dlbox">' +
-        '<div class="dl-row"><input id="dlq" type="text" enterkeyhint="go" placeholder="Search, or paste a link" aria-label="Search, or paste a link" autocomplete="off" autocapitalize="off" spellcheck="false" value="' + esc(dl.q) + '">' +
-        '<button class="btn primary" data-act="dl-go" id="dlGo">' + (link ? ICON.download + "Save to device" : ICON.search + "Search") + "</button></div>" +
+        '<div class="dl-row"><input id="dlq" type="text" enterkeyhint="go" placeholder="' + (srv.ok ? "Search, or paste a link" : "Paste a link") + '" aria-label="' + (srv.ok ? "Search, or paste a link" : "Paste a link") + '" autocomplete="off" autocapitalize="off" spellcheck="false" value="' + esc(dl.q) + '">' +
+        (srv.ok ? '<button class="btn primary" data-act="dl-go" id="dlGo">' + (link ? ICON.download + "Save to device" : ICON.search + "Search") + "</button>" : "") + "</div>" +
         '<div class="dlopts"><div class="seg" role="radiogroup" aria-label="What to save to your device">' +
         ["video", "audio"].map(function (m) { var on = dl.mode === m; return '<button class="segbtn' + (on ? " on" : "") + '" role="radio" aria-checked="' + on + '" data-act="dl-mode" data-mode="' + m + '">' + (m === "video" ? "Video" : "Audio only") + "</button>"; }).join("") +
         "</div>" +
-        '<button class="btn" data-act="dl-library" id="dlLib"' + (link ? "" : " hidden") + ">" + ICON.plus + "Add to library</button></div>" +
+        (srv.ok ? '<button class="btn" data-act="dl-library" id="dlLib"' + (link ? "" : " hidden") + ">" + ICON.plus + "Add to library</button>" : "") +
+        (isIOS ? '<button class="btn' + (srv.ok ? "" : " primary") + '" data-act="dl-phone" id="dlPhone"' + (link ? "" : " hidden") + ">" + ICON.download + "Download on iPhone</button>" : "") + "</div>" +
+        (srv.ok ? "" : '<p class="dlmsg">The download server isn’t reachable right now, so searching is off. Paste a link to download it on this iPhone with a-Shell. <button class="linkbtn" data-act="dl-retry">Try the server again</button></p>') +
         '<div class="dlstat" id="dlstat" aria-live="polite"></div></div><div id="dlres"></div>';
     }
     $("#main").innerHTML = h;
@@ -999,7 +1002,8 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     }).join("") + "</div>";
   }
   function syncDlButtons() {
-    var link = isLinkText(dl.q), go = $("#dlGo"), lib = $("#dlLib");
+    var link = isLinkText(dl.q), go = $("#dlGo"), lib = $("#dlLib"), ph = $("#dlPhone");
+    if (ph) ph.hidden = !link;
     if (go) go.innerHTML = link ? ICON.download + "Save to device" : ICON.search + "Search";
     if (lib) lib.hidden = !link;
   }
@@ -1036,6 +1040,12 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
       return;
     }
     var input = $("#dlq"); if (input) dl.q = input.value.trim();
+    if (act === "dl-phone") {
+      if (!isLinkText(dl.q)) { if (input) input.focus(); return; }
+      dlStatus("Opening the “Crate Download” shortcut… When a-Shell finishes, come back here and use Add music in Library to pick the file from a-Shell › Crate.");
+      location.href = "shortcuts://run-shortcut?name=" + encodeURIComponent("Crate Download") + "&input=text&text=" + encodeURIComponent(dl.mode + " " + normLink(dl.q));
+      return;
+    }
     if (act === "dl-go") {
       if (!dl.q) { if (input) input.focus(); return; }
       if (input) input.blur();
