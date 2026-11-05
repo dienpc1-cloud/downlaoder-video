@@ -49,6 +49,7 @@ def allow_page_to_connect(resp):
     resp.headers["Access-Control-Allow-Origin"] = ALLOWED_ORIGIN
     resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
     resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    resp.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
     return resp
 
 
@@ -93,6 +94,8 @@ def run_job(jid, url, mode):
             raise RuntimeError("The site didn’t return a downloadable file.")
         job["file"] = max(files, key=os.path.getsize)
         job["title"] = info.get("title") or "video"
+        job["artist"] = info.get("artist") or info.get("creator") or info.get("uploader") or ""
+        job["duration"] = info.get("duration")
         job["progress"] = 100
         job["state"] = "done"
     except Exception as e:  # noqa: BLE001
@@ -133,16 +136,50 @@ def start():
     os.makedirs(job_dir)
     with lock:
         jobs[jid] = {"state": "starting", "progress": 0, "dir": job_dir,
-                     "created": time.time(), "file": None, "title": None, "error": None}
+                     "created": time.time(), "file": None, "title": None, "error": None,
+                     "artist": "", "duration": None}
     threading.Thread(target=run_job, args=(jid, url, mode), daemon=True).start()
     return jsonify(id=jid)
+
+
+@app.post("/api/search")
+def search():
+    data = request.get_json(silent=True) or {}
+    if APP_PASSWORD and data.get("password") != APP_PASSWORD:
+        return jsonify(error="Wrong password.", password=True), 401
+    query = (data.get("q") or "").strip()[:200]
+    if not query:
+        return jsonify(error="Type something to search for."), 400
+    opts = {"quiet": True, "no_warnings": True, "skip_download": True,
+            "extract_flat": "in_playlist"}
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(f"ytsearch15:{query}", download=False)
+    except Exception as e:  # noqa: BLE001
+        return jsonify(error="Search failed: " + str(e).replace("ERROR: ", "").strip()), 502
+    results = []
+    for item in info.get("entries") or []:
+        vid = item.get("id")
+        if not vid:
+            continue
+        results.append({
+            "id": vid,
+            "title": item.get("title") or "Untitled",
+            "url": item.get("url") if str(item.get("url", "")).startswith("http")
+                   else f"https://www.youtube.com/watch?v={vid}",
+            "channel": item.get("channel") or item.get("uploader") or "",
+            "duration": item.get("duration"),
+            "views": item.get("view_count"),
+            "thumbnail": f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg",
+        })
+    return jsonify(results=results)
 
 
 @app.get("/api/status/<jid>")
 def status(jid):
     job = jobs.get(jid) or abort(404)
-    return jsonify(state=job["state"], progress=job["progress"],
-                   title=job["title"], error=job["error"])
+    return jsonify(state=job["state"], progress=job["progress"], title=job["title"],
+                   artist=job["artist"], duration=job["duration"], error=job["error"])
 
 
 @app.get("/api/file/<jid>")
