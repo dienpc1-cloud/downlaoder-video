@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Video Downloader</title>
-<link rel="icon" href="/icon.png">
-<link rel="apple-touch-icon" href="/icon.png">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
 <meta name="apple-mobile-web-app-title" content="Downloader">
 <meta name="theme-color" content="#e8edf4" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#10151f" media="(prefers-color-scheme: dark)">
@@ -106,15 +106,33 @@
   const bar = document.getElementById('bar');
   const fill = document.getElementById('fill');
   const msg = document.getElementById('msg');
+
+  // ⬇️ When this page is on GitHub Pages, put your Render address here (no slash at the end).
+  const SERVER = 'https://video-downloader-mhj0.onrender.com';
+  const API = location.hostname.endsWith('github.io') && !SERVER.includes('YOUR-APP-NAME') ? SERVER.replace(/\/+$/, '') : '';
   const pwRow = document.getElementById('pwRow');
   const pw = document.getElementById('pw');
   const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
                 (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
   try { pw.value = localStorage.getItem('dl-password') || ''; } catch (_) {}
-  fetch('/api/config').then(r => r.json()).then(c => {
+  fetch(API + '/api/config').then(readJSON).then(c => {
     if (c.password_required) pwRow.classList.remove('hidden');
   }).catch(() => {});
+
+  // Read a server reply safely, even when it isn't JSON (e.g. an error page)
+  async function readJSON(res) {
+    const text = await res.text();
+    try { return JSON.parse(text); }
+    catch (_) {
+      if (API === '' && location.hostname.endsWith('github.io'))
+        throw new Error('The download server isn’t set up. Add your Render address to SERVER in index.html.');
+      throw new Error(`The download server didn’t answer properly (error ${res.status}). ` +
+        (res.status >= 500 || res.status === 404
+          ? 'It may still be starting up on Render. Wait a minute and try again, and check the SERVER address in index.html.'
+          : 'Check the SERVER address in index.html.'));
+    }
+  }
 
   function show(text, isError = false) {
     msg.textContent = text;
@@ -128,15 +146,15 @@
     go.disabled = true;
     bar.classList.remove('hidden');
     fill.style.width = '0%';
-    show('Looking up the video…');
+    show('Looking up the video… (the first try after a break can take up to a minute while the server wakes up)');
 
     try {
-      const res = await fetch('/api/start', {
+      const res = await fetch(API + '/api/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url, mode, password: pw.value })
       });
-      const data = await res.json();
+      const data = await readJSON(res);
       if (!res.ok) {
         if (data.password) { pwRow.classList.remove('hidden'); pw.focus(); }
         throw new Error(data.error || 'Couldn’t start the download.');
@@ -144,21 +162,23 @@
       try { localStorage.setItem('dl-password', pw.value); } catch (_) {}
       poll(data.id);
     } catch (err) {
-      fail(err.message);
+      fail(err.message === 'Failed to fetch' || err.message === 'Load failed'
+        ? 'Can’t reach the download server. Check the SERVER address in index.html and that it’s running on Render.'
+        : err.message);
     }
   });
 
   async function poll(id) {
     try {
-      const res = await fetch('/api/status/' + id);
+      const res = await fetch(API + '/api/status/' + id);
       if (!res.ok) throw new Error('Lost track of this download. Try again.');
-      const s = await res.json();
+      const s = await readJSON(res);
 
       if (s.state === 'error') return fail(s.error || 'Download failed.');
       fill.style.width = s.progress + '%';
 
       if (s.state === 'done') {
-        const link = '/api/file/' + id;
+        const link = API + '/api/file/' + id;
         msg.classList.remove('error');
         msg.innerHTML = '';
         msg.append('Ready: “' + s.title + '”. Your download should start now. ');

@@ -22,6 +22,8 @@ HAS_FFMPEG = shutil.which("ffmpeg") is not None
 MAX_AGE_SECONDS = 60 * 60          # finished files are deleted after an hour
 MAX_FILESIZE = 2 * 1024 ** 3       # 2 GB cap per download
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")  # set this when the site is public
+# Which website may use this server (your GitHub Pages address). "*" allows any.
+ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "*")
 
 app = Flask(__name__)
 jobs = {}
@@ -40,6 +42,14 @@ def cleanup_loop():
 
 
 threading.Thread(target=cleanup_loop, daemon=True).start()
+
+
+@app.after_request
+def allow_page_to_connect(resp):
+    resp.headers["Access-Control-Allow-Origin"] = ALLOWED_ORIGIN
+    resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return resp
 
 
 def build_options(job, mode):
