@@ -112,7 +112,10 @@ def icon():
 
 @app.get("/api/config")
 def config():
-    return jsonify(password_required=bool(APP_PASSWORD))
+    return jsonify(password_required=bool(APP_PASSWORD),
+                   ytdlp_version=yt_dlp.version.__version__,
+                   javascript_helper=bool(shutil.which("deno")),
+                   ffmpeg=HAS_FFMPEG)
 
 
 @app.post("/api/start")
