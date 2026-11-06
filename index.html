@@ -194,6 +194,25 @@ dialog.wide { width:min(560px,calc(100vw - 32px)); }
 .tag.savetag { border-color:var(--accent); color:var(--accent); font-variant-numeric:tabular-nums; }
 @media (prefers-reduced-motion:reduce) { .dlbar span { transition:none; } }
 
+/* Covers and the edit dialog */
+.art.has-cover { background-size:cover; background-position:center; }
+.art.has-cover .ltr { display:none; }
+.is-current .art.has-cover { box-shadow:inset 0 0 0 44px rgba(0,0,0,.35); }
+.disc.has-cover { background:
+  radial-gradient(circle,var(--surface) 0 5px,transparent 6px),
+  var(--cover) center / cover no-repeat, var(--g,var(--surface2)); }
+.disc, .np { cursor:pointer; }
+.edcover { display:flex; gap:14px; align-items:center; margin-bottom:6px; }
+.edart { width:96px; height:96px; flex:none; border:0; padding:0; border-radius:12px; cursor:pointer;
+  background:var(--g,var(--surface2)); background-size:cover; background-position:center; }
+.edart:not(.has-cover)::after { content:"+"; display:grid; place-items:center; height:100%; color:#fff; font-size:2rem; font-weight:700; }
+.edbtns { display:grid; gap:8px; justify-items:start; }
+.edbtns .btn[hidden] { display:none; }
+.edlab { display:block; margin:12px 0 5px; font-size:.85rem; font-weight:700; color:var(--muted); }
+.edlab span { font-weight:400; }
+.edin { width:100%; padding:10px 14px; border-radius:12px; border:1px solid var(--line); background:var(--bg); color:var(--ink); font:inherit; font-size:17px; }
+.edin:focus { outline:2px solid var(--accent); outline-offset:1px; }
+
 /* Dialogs, toast, drop overlay */
 dialog { border:1px solid var(--line); border-radius:16px; background:var(--surface); color:var(--ink); padding:20px; width:min(420px,calc(100vw - 32px)); }
 dialog::backdrop { background:rgba(10,10,30,.55); }
@@ -291,6 +310,26 @@ dialog p { margin:0 0 14px; color:var(--muted); }
     <button class="btn primary" id="addCreate">Create and add</button>
   </div>
   <div class="dl-foot"><button class="btn" data-close>Done</button></div>
+</dialog>
+
+<dialog id="dlgEdit">
+  <h3>Edit song</h3>
+  <p>This is what your iPhone shows on the lock screen and in Control Center while it plays.</p>
+  <div class="edcover">
+    <button class="edart" id="edArt" type="button" aria-label="Choose a cover picture"></button>
+    <div class="edbtns">
+      <button class="btn" id="edPick" type="button">Choose picture</button>
+      <button class="btn" id="edClear" type="button">Remove picture</button>
+    </div>
+  </div>
+  <label class="edlab" for="edTitle">Song name</label>
+  <input class="edin" id="edTitle" type="text" maxlength="150" autocomplete="off">
+  <label class="edlab" for="edArtist">Artist</label>
+  <input class="edin" id="edArtist" type="text" maxlength="150" autocomplete="off">
+  <label class="edlab" for="edAlbum">Album <span>(optional)</span></label>
+  <input class="edin" id="edAlbum" type="text" maxlength="150" autocomplete="off">
+  <input id="edFile" type="file" accept="image/*" hidden>
+  <div class="dl-foot"><button class="btn" data-close>Cancel</button><button class="btn primary" id="edOk">Save</button></div>
 </dialog>
 
 <dialog id="dlgName">
@@ -1296,8 +1335,6 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
       '<button class="btn primary" data-act="playall">' + ICON.play + "Play</button>" +
       '<button class="btn" data-act="shuffleall">' + ICON.shuffle + "Shuffle</button>" +
       '<button class="btn" data-act="upload">' + ICON.upload + "Add music</button>" +
-      '<button class="btn" data-act="search">' + ICON.search + "Search YouTube</button>" +
-      '<button class="btn" data-act="link">' + ICON.link + (srv.ok ? "Paste a link" : "Paste YouTube link") + "</button>" +
       (p ? '<button class="btn' + (state.reorder ? ' primary' : '') + '" data-act="reorder">' + (state.reorder ? 'Done reordering' : 'Reorder') + '</button><button class="btn" data-act="rename">' + ICON.pencil + 'Rename</button><button class="btn" data-act="delpl">' + ICON.trash + "Delete playlist</button>" : "") +
       "</div>" +
       '<input id="q" class="search" type="search" placeholder="Search this list" value="' + esc(state.q) + '" aria-label="Search this list">' +
@@ -1322,11 +1359,11 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     el.innerHTML = ids.map(function (id) {
       var t = byId(id), isCur = id === cur;
       return '<div class="row ' + (isCur ? "is-current " : "") + (isCur && state.playing ? "is-playing" : "") + '" data-id="' + id + '"' + (drag ? ' draggable="true"' : "") + ">" +
-        '<button class="art" data-act="play" style="--g:' + trackGrad(t) + '" aria-label="Play ' + esc(t.title) + '"><span class="ltr">' + esc((t.title.match(/[A-Za-z0-9\u00C0-\uFFFF]/) || ["♪"])[0].toUpperCase()) + "</span>" + ICON.play + '<span class="eq"><i></i><i></i><i></i></span></button>' +
+        '<button class="art' + (coverOf(t) ? " has-cover" : "") + '" data-act="play" style="--g:' + trackGrad(t) + (coverOf(t) ? ";background-image:url(" + coverOf(t) + ")" : "") + '" aria-label="Play ' + esc(t.title) + '"><span class="ltr">' + esc((t.title.match(/[A-Za-z0-9\u00C0-\uFFFF]/) || ["♪"])[0].toUpperCase()) + "</span>" + ICON.play + '<span class="eq"><i></i><i></i><i></i></span></button>' +
         '<div class="meta"><div class="ttl">' + esc(t.title) + '</div><div class="sub">' + esc(artistOf(t)) + (t.kind === "youtube" ? ' <span class="tag">YouTube</span>' : "") + (saving[id] ? ' <span class="tag savetag">' + esc(saving[id]) + "</span>" : "") + "</div></div>" +
         '<span class="dur">' + (t.duration ? fmt(t.duration) : "") + "</span>" +
         (reorderOn ? '<div class="acts"><button class="iconbtn" data-act="up" aria-label="Move up" title="Move up">' + ICON.up + '</button><button class="iconbtn" data-act="down" aria-label="Move down" title="Move down">' + ICON.down + '</button></div></div>' : '<div class="acts"><button class="iconbtn" data-act="addto" aria-label="Add ' + esc(t.title) + ' to a playlist" title="Add to playlist">' + ICON.plus + "</button>" +
-        '<button class="iconbtn" data-act="download" aria-label="' + (t.kind === "youtube" ? (srv.ok ? "Save as MP3" : "Record and download as MP3") : "Download") + ' ' + esc(t.title) + '" title="' + (t.kind === "youtube" ? (srv.ok ? "Save as MP3" : "Record & download MP3") : "Download") + '">' + ICON.download + "</button>" +
+        '<button class="iconbtn" data-act="edit" aria-label="Edit ' + esc(t.title) + '" title="Edit name, artist and cover">' + ICON.pencil + "</button>" +
         (inPl ? '<button class="iconbtn" data-act="rmpl" aria-label="Remove from playlist" title="Remove from playlist">' + ICON.minus + "</button>"
               : '<button class="iconbtn" data-act="deltrack" aria-label="Delete from library" title="Delete from library">' + ICON.trash + "</button>") +
         "</div></div>");
@@ -1345,6 +1382,9 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     $("#npt").textContent = t ? t.title : "Nothing playing";
     $("#nps").textContent = t ? (artistOf(t) || "YouTube") : "Choose a track to start";
     $("#disc").style.setProperty("--g", t ? trackGrad(t) : "var(--surface2)");
+    var cv = t ? coverOf(t) : "";
+    $("#disc").style.setProperty("--cover", cv ? "url(" + cv + ")" : "none");
+    $("#disc").classList.toggle("has-cover", !!cv);
     $("#disc").classList.toggle("playing", state.playing);
     $("#ytpanel").classList.toggle("on", isYT());
     $("#bPlay").innerHTML = state.playing ? ICON.pause : ICON.play;
@@ -1446,6 +1486,87 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     if (t && d && Math.abs((t.duration || 0) - d) > 1) { t.duration = d; idbPut("tracks", t); }
   }
 
+  /* ---------- Song details and cover ---------- */
+  function coverOf(t) {
+    if (!t) return "";
+    if (t.cover) return t.cover;
+    if (t.coverCleared) return "";
+    return t.ytId ? "https://i.ytimg.com/vi/" + encodeURIComponent(t.ytId) + "/mqdefault.jpg" : "";
+  }
+  // What iPhone shows on the lock screen, in Control Center and in CarPlay
+  function updateLockScreen(t) {
+    if (!("mediaSession" in navigator) || !t) return;
+    var cv = coverOf(t), art = [];
+    if (cv) art.push(t.cover ? { src: cv, sizes: "600x600", type: "image/jpeg" } : { src: cv, sizes: "320x180", type: "image/jpeg" });
+    try { navigator.mediaSession.metadata = new MediaMetadata({ title: t.title, artist: t.artist || "Unknown artist", album: t.album || "Crate", artwork: art }); } catch (e) {}
+  }
+  var edit = { id: null, cover: null };
+  function paintEditCover() {
+    var t = byId(edit.id), el = $("#edArt"), cv = edit.cover || (t && !edit.cleared && t.ytId ? coverOf({ ytId: t.ytId }) : "");
+    el.style.setProperty("--g", t ? trackGrad(t) : "var(--surface2)");
+    el.style.backgroundImage = cv ? "url(" + cv + ")" : "";
+    el.classList.toggle("has-cover", !!cv);
+    $("#edClear").hidden = !cv;
+  }
+  function openEdit(id) {
+    var t = byId(id); if (!t) return;
+    edit = { id: id, cover: t.cover || null, cleared: !!t.coverCleared };
+    $("#edTitle").value = t.title || "";
+    $("#edArtist").value = t.artist || "";
+    $("#edAlbum").value = t.album || "";
+    paintEditCover();
+    openDialog("#dlgEdit");
+  }
+  function imageToCover(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () {
+        try {
+          var size = 600, c = document.createElement("canvas"); c.width = size; c.height = size;
+          var side = Math.min(img.naturalWidth, img.naturalHeight);
+          var sx = (img.naturalWidth - side) / 2, sy = (img.naturalHeight - side) / 2;
+          var ctx = c.getContext("2d");
+          ctx.fillStyle = "#000"; ctx.fillRect(0, 0, size, size);
+          ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+          URL.revokeObjectURL(url);
+          resolve(c.toDataURL("image/jpeg", 0.85));
+        } catch (e) { URL.revokeObjectURL(url); reject(e); }
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error("unreadable")); };
+      img.src = url;
+    });
+  }
+  $("#edPick").addEventListener("click", function () { $("#edFile").value = ""; $("#edFile").click(); });
+  $("#edArt").addEventListener("click", function () { $("#edPick").click(); });
+  $("#edFile").addEventListener("change", function () {
+    var f = this.files && this.files[0]; if (!f) return;
+    imageToCover(f).then(function (data) { edit.cover = data; edit.cleared = false; paintEditCover(); })
+      .catch(function () { toast("Couldn’t read that picture. Try a JPG or PNG."); });
+  });
+  $("#edClear").addEventListener("click", function () { edit.cover = null; edit.cleared = true; paintEditCover(); });
+  $("#edOk").addEventListener("click", function () {
+    var t = byId(edit.id); if (!t) { closeDialog("#dlgEdit"); return; }
+    var title = $("#edTitle").value.trim();
+    if (!title) { $("#edTitle").focus(); toast("Give the song a name."); return; }
+    t.title = title;
+    t.artist = $("#edArtist").value.trim();
+    t.album = $("#edAlbum").value.trim();
+    if (edit.cover) { t.cover = edit.cover; delete t.coverCleared; }
+    else { delete t.cover; if (edit.cleared && t.ytId) t.coverCleared = true; else delete t.coverCleared; }
+    idbPut("tracks", t);
+    closeDialog("#dlgEdit");
+    render();
+    if (currentId() === t.id) { updateLockScreen(t); renderPlayer(); }
+    toast("Saved “" + t.title + "”.");
+  });
+  ["#edTitle", "#edArtist", "#edAlbum"].forEach(function (sel) {
+    $(sel).addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); $("#edOk").click(); } });
+  });
+
+  ["#disc", "#npt", "#nps"].forEach(function (sel) {
+    $(sel).addEventListener("click", function () { var id = currentId(); if (id) openEdit(id); });
+  });
+
   /* ---------- Playback ---------- */
   function load(auto) {
     if (rec) finishRec();
@@ -1459,9 +1580,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
       audio.src = currentUrl;
       if (auto) { var pr = audio.play(); if (pr && pr.catch) pr.catch(function () {}); }
     }
-    if ("mediaSession" in navigator) {
-      try { navigator.mediaSession.metadata = new MediaMetadata({ title: t.title, artist: t.artist || "Unknown artist" }); } catch (e) {}
-    }
+    updateLockScreen(t);
     renderPlayer(); markRows();
   }
   function playFrom(ids, index) {
@@ -1722,6 +1841,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     else if (act === "download") {
       downloadTrack(id);
     }
+    else if (act === "edit") openEdit(id);
   });
 
   $("#addList").addEventListener("click", function (e) {
